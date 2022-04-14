@@ -129,9 +129,9 @@ def train(
 
     # get network
     model = None
-    if model_select == ModelSelect.SRCNN:
+    if model_select == ModelSelect.SRCNN_SIGMOID:
         model = SRCNN()
-    elif model_select == ModelSelect.SRCNN_LINEAR:
+    elif model_select == ModelSelect.SRCNN:
         model = SRCNNLinear()
     elif model_select == ModelSelect.FSRCNN:
         model = FSRCNN()
@@ -391,32 +391,54 @@ def train_on_folds(
                 continue
             else:
                 trained.append(dataset_dirs[j])
-            train(
-                session_name=session_name + '-' + str(i),
-                output_dir=output_dir,
-                model_select=model_select,
-                discriminator_select=discriminator_select,
-                train_dataset_dirs=trained,
-                val_dataset_dirs=valed,
-                batch_size_train=batch_size_train,
-                batch_size_val=batch_size_val,
-                img_shape_x=x_size,
-                img_shape_y=y_size,
-                learning_rate=learning_rate,
-                disc_loss_weight=disc_loss_weight,
-                epochs=epochs,
-                shuffle=shuffle,
-                num_workers_train=num_workers_train,
-                num_workers_val=num_workers_val,
-            )
+        print(session_name + '-' + str(i))
+        train(
+            session_name=session_name + '-' + str(i),
+            output_dir=output_dir,
+            model_select=model_select,
+            discriminator_select=discriminator_select,
+            train_dataset_dirs=trained,
+            val_dataset_dirs=valed,
+            batch_size_train=batch_size_train,
+            batch_size_val=batch_size_val,
+            img_shape_x=x_size,
+            img_shape_y=y_size,
+            learning_rate=learning_rate,
+            disc_loss_weight=disc_loss_weight,
+            epochs=epochs,
+            shuffle=shuffle,
+            num_workers_train=num_workers_train,
+            num_workers_val=num_workers_val,
+        )
 
 
 if __name__ == '__main__':
-    x_size = (240, 240)
-    y_size = (480, 480)
-    epochs = 50
-    num_workers_train = 10
-    num_workers_val = 8
+    # ++++++++++++++++++++++++++++++++++++++++++++++++++
+    # +++        Experiment on sigmoid SRCNN         +++
+    # ++++++++++++++++++++++++++++++++++++++++++++++++++
+    train_on_folds(
+        session_name='SRCNN_SIGMOID',
+        output_dir=r'E:\my_files\programmes\python\super_resolution_outputs',
+        x_size=(240, 240),
+        y_size=(480, 480),
+        model_select=ModelSelect.SRCNN_SIGMOID,
+        discriminator_select=DiscriminatorSelect.NO_DISCRIMINATOR,
+        dataset_dirs=[
+            r'E:\my_files\programmes\python\super_resolution_images\fold0',
+            r'E:\my_files\programmes\python\super_resolution_images\fold1',
+            r'E:\my_files\programmes\python\super_resolution_images\fold2',
+            r'E:\my_files\programmes\python\super_resolution_images\fold3',
+            r'E:\my_files\programmes\python\super_resolution_images\fold4',
+        ],
+        epochs=60,
+        batch_size_train=4,
+        batch_size_val=1,
+        learning_rate=0.0001,
+        num_workers_train=8,
+        num_workers_val=8,
+        shuffle=True,
+        run_tests=5,
+    )
 
     # ++++++++++++++++++++++++++++++++++++++++++++++++++
     # +++          Experiment on pure SRCNN          +++
@@ -435,41 +457,14 @@ if __name__ == '__main__':
             r'E:\my_files\programmes\python\super_resolution_images\fold3',
             r'E:\my_files\programmes\python\super_resolution_images\fold4',
         ],
-        epochs=50,
+        epochs=60,
         batch_size_train=4,
         batch_size_val=1,
         learning_rate=0.0001,
         num_workers_train=8,
         num_workers_val=8,
         shuffle=True,
-        run_tests=0,
-    )
-
-    # ++++++++++++++++++++++++++++++++++++++++++++++++++
-    # +++     Experiment on linear output SRCNN      +++
-    # ++++++++++++++++++++++++++++++++++++++++++++++++++
-    train_on_folds(
-        session_name='SRCNN_LINEAR',
-        output_dir=r'E:\my_files\programmes\python\super_resolution_outputs',
-        x_size=(240, 240),
-        y_size=(480, 480),
-        model_select=ModelSelect.SRCNN_LINEAR,
-        discriminator_select=DiscriminatorSelect.NO_DISCRIMINATOR,
-        dataset_dirs=[
-            r'E:\my_files\programmes\python\super_resolution_images\fold0',
-            r'E:\my_files\programmes\python\super_resolution_images\fold1',
-            r'E:\my_files\programmes\python\super_resolution_images\fold2',
-            r'E:\my_files\programmes\python\super_resolution_images\fold3',
-            r'E:\my_files\programmes\python\super_resolution_images\fold4',
-        ],
-        epochs=50,
-        batch_size_train=4,
-        batch_size_val=1,
-        learning_rate=0.0001,
-        num_workers_train=8,
-        num_workers_val=8,
-        shuffle=True,
-        run_tests=1,
+        run_tests=5,
     )
 
     # ++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -489,25 +484,25 @@ if __name__ == '__main__':
             r'E:\my_files\programmes\python\super_resolution_images\fold3',
             r'E:\my_files\programmes\python\super_resolution_images\fold4',
         ],
-        epochs=50,
+        epochs=60,
         batch_size_train=4,
         batch_size_val=1,
         learning_rate=0.0001,
         num_workers_train=8,
         num_workers_val=8,
         shuffle=True,
-        run_tests=1,
+        run_tests=5,
     )
 
-    # ++++++++++++++++++++++++++++++++++++++++++++++++++
-    # +++Experiment on single-input GAN output SRCNN +++
-    # ++++++++++++++++++++++++++++++++++++++++++++++++++
+    # +++++++++++++++++++++++++++++++++++++++++++++++++++
+    # +++ Experiment on single-input GAN output SRCNN +++
+    # +++++++++++++++++++++++++++++++++++++++++++++++++++
     train_on_folds(
         session_name='SRCNN-DISC-SINGLE',
         output_dir=r'E:\my_files\programmes\python\super_resolution_outputs',
         x_size=(240, 240),
         y_size=(480, 480),
-        model_select=ModelSelect.SRCNN_LINEAR,
+        model_select=ModelSelect.SRCNN,
         discriminator_select=DiscriminatorSelect.PATCH_DISCRIMINATOR_SINGLE_INPUT,
         dataset_dirs=[
             r'E:\my_files\programmes\python\super_resolution_images\fold0',
@@ -516,7 +511,7 @@ if __name__ == '__main__':
             r'E:\my_files\programmes\python\super_resolution_images\fold3',
             r'E:\my_files\programmes\python\super_resolution_images\fold4',
         ],
-        epochs=50,
+        epochs=60,
         batch_size_train=4,
         batch_size_val=1,
         learning_rate=0.0001,
@@ -524,18 +519,18 @@ if __name__ == '__main__':
         num_workers_val=8,
         shuffle=True,
         disc_loss_weight=0.1,
-        run_tests=0,
+        run_tests=5,
     )
 
-    # ++++++++++++++++++++++++++++++++++++++++++++++++++
-    # +++Experiment on double-input GAN output SRCNN +++
-    # ++++++++++++++++++++++++++++++++++++++++++++++++++
+    # +++++++++++++++++++++++++++++++++++++++++++++++++++
+    # +++ Experiment on double-input GAN output SRCNN +++
+    # +++++++++++++++++++++++++++++++++++++++++++++++++++
     train_on_folds(
         session_name='SRCNN-DISC-DOUBLE',
         output_dir=r'E:\my_files\programmes\python\super_resolution_outputs',
         x_size=(240, 240),
         y_size=(480, 480),
-        model_select=ModelSelect.SRCNN_LINEAR,
+        model_select=ModelSelect.SRCNN,
         discriminator_select=DiscriminatorSelect.PATCH_DISCRIMINATOR_DOUBLE_INPUT,
         dataset_dirs=[
             r'E:\my_files\programmes\python\super_resolution_images\fold0',
@@ -544,7 +539,7 @@ if __name__ == '__main__':
             r'E:\my_files\programmes\python\super_resolution_images\fold3',
             r'E:\my_files\programmes\python\super_resolution_images\fold4',
         ],
-        epochs=50,
+        epochs=60,
         batch_size_train=4,
         batch_size_val=1,
         learning_rate=0.0001,
@@ -552,5 +547,61 @@ if __name__ == '__main__':
         num_workers_val=8,
         shuffle=True,
         disc_loss_weight=0.1,
-        run_tests=0,
+        run_tests=5,
+    )
+
+    # ++++++++++++++++++++++++++++++++++++++++++++++++++++
+    # +++ Experiment on single-input GAN output FSRCNN +++
+    # ++++++++++++++++++++++++++++++++++++++++++++++++++++
+    train_on_folds(
+        session_name='FSRCNN-DISC-SINGLE',
+        output_dir=r'E:\my_files\programmes\python\super_resolution_outputs',
+        x_size=(240, 240),
+        y_size=(480, 480),
+        model_select=ModelSelect.FSRCNN,
+        discriminator_select=DiscriminatorSelect.PATCH_DISCRIMINATOR_SINGLE_INPUT,
+        dataset_dirs=[
+            r'E:\my_files\programmes\python\super_resolution_images\fold0',
+            r'E:\my_files\programmes\python\super_resolution_images\fold1',
+            r'E:\my_files\programmes\python\super_resolution_images\fold2',
+            r'E:\my_files\programmes\python\super_resolution_images\fold3',
+            r'E:\my_files\programmes\python\super_resolution_images\fold4',
+        ],
+        epochs=60,
+        batch_size_train=4,
+        batch_size_val=1,
+        learning_rate=0.0001,
+        num_workers_train=8,
+        num_workers_val=8,
+        shuffle=True,
+        disc_loss_weight=0.1,
+        run_tests=5,
+    )
+
+    # ++++++++++++++++++++++++++++++++++++++++++++++++++++
+    # +++ Experiment on double-input GAN output FSRCNN +++
+    # ++++++++++++++++++++++++++++++++++++++++++++++++++++
+    train_on_folds(
+        session_name='FSRCNN-DISC-DOUBLE',
+        output_dir=r'E:\my_files\programmes\python\super_resolution_outputs',
+        x_size=(240, 240),
+        y_size=(480, 480),
+        model_select=ModelSelect.FSRCNN,
+        discriminator_select=DiscriminatorSelect.PATCH_DISCRIMINATOR_DOUBLE_INPUT,
+        dataset_dirs=[
+            r'E:\my_files\programmes\python\super_resolution_images\fold0',
+            r'E:\my_files\programmes\python\super_resolution_images\fold1',
+            r'E:\my_files\programmes\python\super_resolution_images\fold2',
+            r'E:\my_files\programmes\python\super_resolution_images\fold3',
+            r'E:\my_files\programmes\python\super_resolution_images\fold4',
+        ],
+        epochs=60,
+        batch_size_train=4,
+        batch_size_val=1,
+        learning_rate=0.0001,
+        num_workers_train=8,
+        num_workers_val=8,
+        shuffle=True,
+        disc_loss_weight=0.1,
+        run_tests=5,
     )

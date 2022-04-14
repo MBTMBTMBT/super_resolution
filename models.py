@@ -6,8 +6,8 @@ from torchstat import stat
 
 @enum.unique
 class ModelSelect(enum.IntEnum):
-    SRCNN = 0
-    SRCNN_LINEAR = 1
+    SRCNN_SIGMOID = 0
+    SRCNN = 1
     ESRGAN = 2
     FSRCNN = 3
 
@@ -113,18 +113,18 @@ class PatchDiscriminatorDoubleInput(torch.nn.Module):
         super(PatchDiscriminatorDoubleInput, self).__init__()
 
         self.big_input = torch.nn.Sequential(
-            torch.nn.Conv2d(in_channels, 32, (3, 3), stride=(2, 2), padding=1),
+            torch.nn.Conv2d(in_channels, 16, (3, 3), stride=(2, 2), padding=1),
             torch.nn.LeakyReLU(0.2),
         )
         self.small_input = torch.nn.Sequential(
-            torch.nn.Conv2d(in_channels, 32, (3, 3), stride=(1, 1), padding=1),
+            torch.nn.Conv2d(in_channels, 16, (3, 3), stride=(1, 1), padding=1),
             torch.nn.LeakyReLU(0.2),
         )
         self.model = torch.nn.Sequential(
+            *discriminator_block(32, 64),
             *discriminator_block(64, 128),
             *discriminator_block(128, 256),
             *discriminator_block(256, 512),
-            *discriminator_block(512, 1024),
             torch.nn.ZeroPad2d((1, 0, 1, 0)),
             torch.nn.Conv2d(1024, out_channels, (4, 4), padding=1, bias=False)
         )
