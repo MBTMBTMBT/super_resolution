@@ -1,8 +1,7 @@
-import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data.dataloader import DataLoader
-from models import SRCNN, SRCNNLinear
+from models import *
 from my_utils import load_model
 from dataset import CroppingDataset
 
@@ -27,10 +26,10 @@ class Predictor(object):
 
 
 if __name__ == '__main__':
-    model = SRCNNLinear()
+    model = FSRCNN()
     model = load_model(
         model,
-        r'E:\my_files\programmes\python\super_resolution_outputs\SRCNN_LINEAR-DOUBLE_DISC-0\saved_checkpoints\model_param_49.pkl',
+        r'E:\my_files\programmes\python\super_resolution_outputs\FSRCNN-0\saved_checkpoints\model_param_10.pkl',
         device=torch.device("cpu"),
     )
     predictor = Predictor(
@@ -38,7 +37,7 @@ if __name__ == '__main__':
         model=model,
     )
     val_dataset = CroppingDataset(
-        dataset_dir=r'E:\my_files\programmes\python\super_resolution_images\fold4',
+        dataset_dir=r'E:\my_files\programmes\python\super_resolution_images\fold0',
         x_size=(240, 240),
         y_size=(480, 480),
         resize_mode='crop_middle',
