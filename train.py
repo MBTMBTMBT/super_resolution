@@ -89,8 +89,8 @@ def train(
         train_dataset.join(
             CroppingDataset(
                 dataset_dir=train_dataset_dirs[i],
-                x_size=x_size,
-                y_size=y_size,
+                x_size=img_shape_x,
+                y_size=img_shape_y,
                 resize_mode='random_scale_crop',
                 rand_flip=True,
             )
@@ -101,8 +101,8 @@ def train(
         val_dataset.join(
             CroppingDataset(
                 dataset_dir=val_dataset_dirs[i],
-                x_size=x_size,
-                y_size=y_size,
+                x_size=img_shape_x,
+                y_size=img_shape_y,
                 resize_mode='crop_middle',
                 rand_flip=False,
             )
