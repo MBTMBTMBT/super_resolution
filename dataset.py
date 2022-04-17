@@ -185,10 +185,10 @@ class ResizingDataset(CroppingDataset):
         # img_y = self.resize_y(img)
         # img_x = self.resize_x(img)
         # print('end')
-        resize = transforms.Resize((math.ceil(img.shape[1] / 2), math.ceil(img.shape[2] / 2)), antialias=True)
-
-        img_y = img
-        img_x = resize(img)
+        resize_x = transforms.Resize((math.ceil(img.shape[1] / 2), math.ceil(img.shape[2] / 2)), antialias=True)
+        img_x = resize_x(img)
+        resize_y = transforms.Resize((img_x.shape[1] * 2, img_x.shape[2] * 2), antialias=True)
+        img_y = resize_y(img)
 
         return img_x, img_y
 
