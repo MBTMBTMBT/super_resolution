@@ -387,7 +387,7 @@ def train_on_folds(
         valed = []
         valed.append(dataset_dirs[len(dataset_dirs) - 1 - i])
         for j in range(len(dataset_dirs)):
-            if i == len(dataset_dirs) - 1 - i:
+            if j == len(dataset_dirs) - 1 - i:
                 continue
             else:
                 trained.append(dataset_dirs[j])
@@ -439,6 +439,11 @@ if __name__ == '__main__':
         shuffle=True,
         run_tests=5,
     )
+    # r'/home/mbt/super_resolution_workplace/super_resolution_images/fold0',
+    # r'/home/mbt/super_resolution_workplace/super_resolution_images/fold1',
+    # r'/home/mbt/super_resolution_workplace/super_resolution_images/fold2',
+    # r'/home/mbt/super_resolution_workplace/super_resolution_images/fold3',
+    # r'/home/mbt/super_resolution_workplace/super_resolution_images/fold4',
 
     # ++++++++++++++++++++++++++++++++++++++++++++++++++
     # +++          Experiment on pure SRCNN          +++

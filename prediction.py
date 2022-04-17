@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import torch
 from torch.utils.data.dataloader import DataLoader
 from models import *
 from my_utils import load_model
@@ -19,7 +20,8 @@ class Predictor(object):
     def predict(self, img_x: torch.Tensor) -> np.ndarray:
         assert len(img_x.shape) == 4
         assert img_x.shape[2] == self.input_size[0] and img_x.shape[3] == self.input_size[1]
-        prediction = self.model(img_x)
+        with torch.no_grad():
+            prediction = self.model(img_x)
         prediction = np.transpose(prediction.detach().numpy(), (0, 2, 3, 1))
         prediction = np.clip(prediction, 0, 1)
         return prediction
