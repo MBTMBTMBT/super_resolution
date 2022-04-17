@@ -7,6 +7,7 @@ import operator
 import torchvision.transforms.transforms as transforms
 import random
 import tqdm
+import math
 
 
 class CroppingDataset(Dataset):
@@ -184,7 +185,7 @@ class ResizingDataset(CroppingDataset):
         # img_y = self.resize_y(img)
         # img_x = self.resize_x(img)
         # print('end')
-        resize = transforms.Resize((img.shape[1] // 2, img.shape[2] // 2), antialias=True)
+        resize = transforms.Resize((math.ceil(img.shape[1] / 2), math.ceil(img.shape[2] / 2)), antialias=True)
 
         img_y = img
         img_x = resize(img)

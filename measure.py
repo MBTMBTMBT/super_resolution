@@ -40,8 +40,6 @@ if __name__ == '__main__':
     )
     val_dataset = ResizingDataset(
         dataset_dir=r'E:\my_files\programmes\python\super_resolution_images\srclassic\SR_testing_datasets\Set14',
-        x_size=(240, 240),
-        y_size=(480, 480),
     )
     val_loader = DataLoader(
         dataset=val_dataset,
