@@ -2,7 +2,9 @@ import numpy as np
 import math
 
 import torch
+from torch.utils.data import DataLoader
 from skimage.metrics import structural_similarity as sk_ssim
+import matplotlib.pyplot as plt
 
 from prediction import Predictor
 from models import *
@@ -11,7 +13,7 @@ from dataset import *
 
 
 def mse(slice_a: np.ndarray, slice_b: np.ndarray) -> float:
-    return torch.mean(torch.square(np.subtract(slice_a, slice_b))).item()
+    return np.mean(np.square(np.subtract(slice_a, slice_b))).item()
 
 
 def psnr(slice_a: np.ndarray, slice_b: np.ndarray):
@@ -33,16 +35,13 @@ if __name__ == '__main__':
         device=torch.device("cpu"),
     )
     predictor = Predictor(
-        input_size=(240, 240),
+        input_size=(128, 128),
         model=model,
     )
-    val_dataset = CroppingDataset(
-        dataset_dir=r'E:\my_files\programmes\python\super_resolution_images\fold0',
-        x_size=(240, 240),
-        y_size=(480, 480),
-        resize_mode='crop_middle',
-        rand_flip=False,
-        crop_middle_scale=4,
+    val_dataset = ResizingDataset(
+        dataset_dir=r'E:\my_files\programmes\python\super_resolution_images\srclassic\SR_testing_datasets\Set5',
+        x_size=(128, 128),
+        y_size=(256, 256),
     )
     val_loader = DataLoader(
         dataset=val_dataset,
@@ -73,6 +72,7 @@ if __name__ == '__main__':
         # plt.title('out')
         # plt.imshow(np.squeeze(out))
         # plt.show()
+        plt.imsave(r'E:\my_files\programmes\python\super_resolution_outputs\test_imgs\\' + str(count) + '.png', out)
     mse_mean = sum(mse_lst) / count
     psnr_mean = sum(psnr_lst) / count
     ssim_mean = sum(ssim_lst) / count

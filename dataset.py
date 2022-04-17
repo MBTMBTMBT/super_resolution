@@ -149,6 +149,45 @@ class CroppingDataset(Dataset):
         return img.transpose((2, 0, 1)), True
 
 
+class ResizingDataset(CroppingDataset):
+    def __init__(
+            self,
+            dataset_dir: str,
+            x_size: tuple,
+            y_size: tuple,
+    ):
+        super(ResizingDataset, self).__init__(
+            dataset_dir,
+            x_size,
+            y_size,
+            resize_mode='crop_middle',
+            rand_flip=False,
+        )
+
+    def __getitem__(self, index):
+        img_path = self.img_path_list[index]
+        # print('begin reading')
+        img, success = CroppingDataset._read_image(img_path)
+        if not success:
+            print('Image error: ', img_path)
+        # print('end reading')
+
+        # change values into 0 ~ 1
+        img = img.type(torch.float32)
+        img /= 255
+
+        # print('begin crop')
+
+        if self.rand_flip:
+            img = self.flip(img)
+
+        img_y = self.resize_y(img)
+        img_x = self.resize_x(img)
+        # print('end')
+
+        return img_x, img_y
+
+
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     from torch.utils.data import DataLoader
