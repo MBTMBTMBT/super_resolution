@@ -153,13 +153,13 @@ class ResizingDataset(CroppingDataset):
     def __init__(
             self,
             dataset_dir: str,
-            x_size: tuple,
-            y_size: tuple,
+            # x_size: tuple,
+            # y_size: tuple,
     ):
         super(ResizingDataset, self).__init__(
             dataset_dir,
-            x_size,
-            y_size,
+            x_size=(240, 240),
+            y_size=(480, 480),
             resize_mode='crop_middle',
             rand_flip=False,
         )
@@ -181,9 +181,13 @@ class ResizingDataset(CroppingDataset):
         if self.rand_flip:
             img = self.flip(img)
 
-        img_y = self.resize_y(img)
-        img_x = self.resize_x(img)
+        # img_y = self.resize_y(img)
+        # img_x = self.resize_x(img)
         # print('end')
+        resize = transforms.Resize((img.shape[1] // 2, img.shape[2] // 2), antialias=True)
+
+        img_y = img
+        img_x = resize(img)
 
         return img_x, img_y
 

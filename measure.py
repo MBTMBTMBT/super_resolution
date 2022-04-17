@@ -35,13 +35,13 @@ if __name__ == '__main__':
         device=torch.device("cpu"),
     )
     predictor = Predictor(
-        input_size=(128, 128),
+        # input_size=(240, 240),
         model=model,
     )
     val_dataset = ResizingDataset(
-        dataset_dir=r'E:\my_files\programmes\python\super_resolution_images\srclassic\SR_testing_datasets\Set5',
-        x_size=(128, 128),
-        y_size=(256, 256),
+        dataset_dir=r'E:\my_files\programmes\python\super_resolution_images\srclassic\SR_testing_datasets\Set14',
+        x_size=(240, 240),
+        y_size=(480, 480),
     )
     val_loader = DataLoader(
         dataset=val_dataset,

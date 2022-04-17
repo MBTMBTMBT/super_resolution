@@ -10,16 +10,16 @@ from dataset import CroppingDataset
 class Predictor(object):
     def __init__(
             self,
-            input_size: tuple,
+            # input_size: tuple,
             model: torch.nn.Module,
     ):
-        self.input_size = input_size
+        # self.input_size = input_size
         self.model = model
         self.model.eval()
 
     def predict(self, img_x: torch.Tensor) -> np.ndarray:
         assert len(img_x.shape) == 4
-        assert img_x.shape[2] == self.input_size[0] and img_x.shape[3] == self.input_size[1]
+        # assert img_x.shape[2] == self.input_size[0] and img_x.shape[3] == self.input_size[1]
         with torch.no_grad():
             prediction = self.model(img_x)
         prediction = np.transpose(prediction.detach().numpy(), (0, 2, 3, 1))
@@ -35,7 +35,7 @@ if __name__ == '__main__':
         device=torch.device("cpu"),
     )
     predictor = Predictor(
-        input_size=(240, 240),
+        # input_size=(240, 240),
         model=model,
     )
     val_dataset = CroppingDataset(
