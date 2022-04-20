@@ -4,7 +4,7 @@ import torch
 from torch.utils.data.dataloader import DataLoader
 from models import *
 from my_utils import load_model
-from dataset import CroppingDataset
+from dataset import *
 
 
 class Predictor(object):
@@ -28,6 +28,7 @@ class Predictor(object):
 
 
 if __name__ == '__main__':
+    '''
     model = FSRCNN()
     model = load_model(
         model,
@@ -63,6 +64,32 @@ if __name__ == '__main__':
         img_y = np.squeeze(np.transpose(img_y.detach().numpy(), (0, 2, 3, 1)))
         plt.imshow(img_y)
         plt.figure(2)
+        plt.title('out')
+        plt.imshow(np.squeeze(out))
+        plt.show()
+    '''
+
+    model = SRCNN()
+    model = load_model(
+        model,
+        r'E:\my_files\programmes\python\super_resolution_outputs\SRCNN-5000-64-0\saved_checkpoints\model_param_69.pkl',
+        device=torch.device("cpu"),
+    )
+    predictor = Predictor(
+        model=model,
+    )
+    val_dataset = JustDataset(
+        dataset_dir=r'E:\my_files\programmes\python\super_resolution_images\srclassic\SR_testing_datasets\Urban100',
+    )
+    val_loader = DataLoader(
+        dataset=val_dataset,
+        shuffle=False,
+        num_workers=0,
+        batch_size=1,
+    )
+    for img in val_loader:
+        out = predictor.predict(img)
+        plt.figure(0)
         plt.title('out')
         plt.imshow(np.squeeze(out))
         plt.show()

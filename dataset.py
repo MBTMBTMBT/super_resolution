@@ -60,7 +60,7 @@ class CroppingDataset(Dataset):
         self.resize_x = transforms.Resize(x_size, antialias=True)
         self.flip = transforms.RandomHorizontalFlip()
         self.crop_middle \
-            = transforms.CenterCrop((x_size[0] * self.crop_middle_scale, x_size[1] * self.crop_middle_scale))
+            = transforms.CenterCrop((y_size[0] * self.crop_middle_scale, y_size[1] * self.crop_middle_scale))
 
     def join(self, dataset):
         """
@@ -97,7 +97,7 @@ class CroppingDataset(Dataset):
         elif self.resize_mode == 'random_scale_crop':
             count = 0
             while True:
-                scale = random.randint(1, self.max_crop_scale + 1)
+                scale = random.randint(1, self.max_crop_scale)
                 if self.y_size[0] * scale <= img.shape[1] and self.y_size[1] * scale <= img.shape[2]:
                     break
                 elif count >= 3:
@@ -108,12 +108,13 @@ class CroppingDataset(Dataset):
             img_y = self.crop_y_scale[scale](img)
             img_y = self.resize_y(img_y)
         elif self.resize_mode == 'crop_middle':
-            if self.y_size[0] * self.crop_middle_scale > img.shape[1] \
-                    or self.y_size[1] * self.crop_middle_scale > img.shape[2]:
-                img_y = self.resize_y(img)
-            else:
-                img_y = self.crop_middle(img)
-                img_y = self.resize_y(img_y)
+            # if self.y_size[0] * self.crop_middle_scale > img.shape[1] \
+            #         or self.y_size[1] * self.crop_middle_scale > img.shape[2]:
+            #     img_y = self.resize_y(img)
+            # else:
+            # print(img.shape)
+            img_y = self.crop_middle(img)
+            img_y = self.resize_y(img_y)
         img_x = self.resize_x(img_y)
         # print('end')
 
@@ -156,13 +157,14 @@ class ResizingDataset(CroppingDataset):
             dataset_dir: str,
             # x_size: tuple,
             # y_size: tuple,
+            rand_flip=False
     ):
         super(ResizingDataset, self).__init__(
             dataset_dir,
             x_size=(240, 240),
             y_size=(480, 480),
             resize_mode='crop_middle',
-            rand_flip=False,
+            rand_flip=rand_flip,
         )
 
     def __getitem__(self, index):
@@ -193,18 +195,35 @@ class ResizingDataset(CroppingDataset):
         return img_x, img_y
 
 
+class JustDataset(ResizingDataset):
+    def __init__(self, dataset_dir: str):
+        super().__init__(dataset_dir)
+
+    def __getitem__(self, index):
+        img_path = self.img_path_list[index]
+        img, success = CroppingDataset._read_image(img_path)
+        if not success:
+            print('Image error: ', img_path)
+
+        # change values into 0 ~ 1
+        img = img.type(torch.float32)
+        img /= 255
+        return img
+
+
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     from torch.utils.data import DataLoader
 
     test_dataset = CroppingDataset(
         dataset_dir=r'E:\my_files\programmes\python\super_resolution_images\fold0',
-        x_size=(240, 240),
-        y_size=(480, 480),
-        resize_mode='random_scale_crop',
+        x_size=(1080, 1920),
+        y_size=(2160, 3840),
+        resize_mode='random_crop',
         rand_flip=True,
+        crop_middle_scale=1,
     )
-    test_loader = DataLoader(test_dataset, shuffle=True, num_workers=2, batch_size=1, prefetch_factor=2)
+    test_loader = DataLoader(test_dataset, shuffle=True, num_workers=0, batch_size=1, prefetch_factor=2)
     for imgs_x, imgs_y in tqdm.tqdm(test_loader):
         imgs_y = torch.squeeze(imgs_y)
         imgs_x = torch.squeeze(imgs_x)

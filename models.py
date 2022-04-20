@@ -10,6 +10,7 @@ class ModelSelect(enum.IntEnum):
     SRCNN = 1
     ESRGAN = 2
     FSRCNN = 3
+    FSRECNNSRCNN = 4
 
 
 @enum.unique
@@ -19,10 +20,10 @@ class DiscriminatorSelect(enum.IntEnum):
     PATCH_DISCRIMINATOR_DOUBLE_INPUT = 2
 
 
-class SRCNN(torch.nn.Module):
+class SRCNN_SIGMOID(torch.nn.Module):
     def __init__(self):
         super().__init__()
-        self.up_sample = torch.nn.UpsamplingBilinear2d(scale_factor=2)
+        # self.up_sample = torch.nn.UpsamplingBilinear2d(scale_factor=2)
         self.patch_extraction \
             = torch.nn.Conv2d(in_channels=3, out_channels=64, kernel_size=(5, 5), stride=(1, 1), padding=2)
         self.non_linear \
@@ -31,7 +32,8 @@ class SRCNN(torch.nn.Module):
             = torch.nn.Conv2d(in_channels=32, out_channels=3, kernel_size=(9, 9), stride=(1, 1), padding=4)
 
     def forward(self, x):
-        x = self.up_sample(x)
+        # x = self.up_sample(x)
+        x = torch.nn.functional.interpolate(x, scale_factor=2, mode='bicubic')
         fm_1 = torch.nn.functional.relu(self.patch_extraction(x))
         fm_2 = torch.nn.functional.relu(self.non_linear(fm_1))
         fm_3 = torch.nn.functional.sigmoid(self.reconstruction(fm_2))
@@ -39,10 +41,11 @@ class SRCNN(torch.nn.Module):
 
 
 # https://github.com/yjn870/SRCNN-pytorch
-class SRCNNLinear(torch.nn.Module):
-    def __init__(self):
+class SRCNN(torch.nn.Module):
+    def __init__(self, scale_factor=2):
         super().__init__()
-        self.up_sample = torch.nn.UpsamplingBilinear2d(scale_factor=2)
+        # self.up_sample = torch.nn.UpsamplingBilinear2d(scale_factor=2)
+        self.scale_factor = scale_factor
         self.patch_extraction \
             = torch.nn.Conv2d(in_channels=3, out_channels=64, kernel_size=(5, 5), stride=(1, 1), padding=2)
         self.non_linear \
@@ -51,7 +54,9 @@ class SRCNNLinear(torch.nn.Module):
             = torch.nn.Conv2d(in_channels=32, out_channels=3, kernel_size=(9, 9), stride=(1, 1), padding=4)
 
     def forward(self, x):
-        x = self.up_sample(x)
+        # x = self.up_sample(x)
+        if self.scale_factor >= 2:
+            x = torch.nn.functional.interpolate(x, scale_factor=self.scale_factor, mode='bicubic')
         fm_1 = torch.nn.functional.relu(self.patch_extraction(x))
         fm_2 = torch.nn.functional.relu(self.non_linear(fm_1))
         fm_3 = self.reconstruction(fm_2)
@@ -63,21 +68,48 @@ class FSRCNN(torch.nn.Module):
     def __init__(self, scale_factor=2, num_channels=3, d=56, s=12, m=4):
         super(FSRCNN, self).__init__()
         self.first_part = torch.nn.Sequential(
-            torch.nn.Conv2d(num_channels, d, kernel_size=(5, 5), padding=5//2),
+            torch.nn.Conv2d(num_channels, d, kernel_size=(5, 5), padding=5 // 2),
             torch.nn.PReLU(d)
         )
         self.mid_part = [torch.nn.Conv2d(d, s, kernel_size=(1, 1)), torch.nn.PReLU(s)]
         for _ in range(m):
-            self.mid_part.extend([torch.nn.Conv2d(s, s, kernel_size=(3, 3), padding=3//2), torch.nn.PReLU(s)])
+            self.mid_part.extend([torch.nn.Conv2d(s, s, kernel_size=(3, 3), padding=3 // 2), torch.nn.PReLU(s)])
         self.mid_part.extend([torch.nn.Conv2d(s, d, kernel_size=(1, 1)), torch.nn.PReLU(d)])
         self.mid_part = torch.nn.Sequential(*self.mid_part)
-        self.last_part = torch.nn.ConvTranspose2d(d, num_channels, kernel_size=(9, 9), stride=scale_factor,
-                                                  padding=(9//2, 9//2), output_padding=scale_factor-1)
+        self.last_part = torch.nn.ConvTranspose2d(d, num_channels, kernel_size=(9, 9),
+                                                  stride=(scale_factor, scale_factor),
+                                                  padding=(9 // 2, 9 // 2),
+                                                  output_padding=(scale_factor - 1, scale_factor - 1))
 
     def forward(self, x):
         x = self.first_part(x)
         x = self.mid_part(x)
         x = self.last_part(x)
+        return x
+
+
+class FSRECNNSRCNN(torch.nn.Module):
+    def __init__(self, scale_factor=2, pe=12):
+        super(FSRECNNSRCNN, self).__init__()
+        self.scale_factor = scale_factor
+        self.fsrcnn = FSRCNN(scale_factor=scale_factor)
+        self.fsrcnn.last_part = torch.nn.ConvTranspose2d(56, 64, kernel_size=(9, 9),
+                                                         stride=(scale_factor, scale_factor),
+                                                         padding=(9 // 2, 9 // 2),
+                                                         output_padding=(scale_factor - 1, scale_factor - 1))
+        self.srcnn = SRCNN(scale_factor=1)
+        self.srcnn.patch_extraction = torch.nn.Sequential()
+        for _ in range(pe):
+            self.srcnn.patch_extraction.append(
+                torch.nn.Conv2d(64, 64, kernel_size=(3, 3), padding=3 // 2)
+            )
+            self.srcnn.patch_extraction.append(
+                torch.nn.PReLU(64)
+            )
+
+    def forward(self, x):
+        x = self.fsrcnn(x)
+        x = self.srcnn(x)
         return x
 
 
@@ -137,11 +169,16 @@ class PatchDiscriminatorDoubleInput(torch.nn.Module):
 class ResidualDenseBlock(torch.nn.Module):
     def __init__(self, nf, gc=32, res_scale=0.2):
         super(ResidualDenseBlock, self).__init__()
-        self.layer1 = torch.nn.Sequential(torch.nn.Conv2d(nf + 0 * gc, gc, (3, 3), padding=1, bias=True), torch.nn.LeakyReLU())
-        self.layer2 = torch.nn.Sequential(torch.nn.Conv2d(nf + 1 * gc, gc, (3, 3), padding=1, bias=True), torch.nn.LeakyReLU())
-        self.layer3 = torch.nn.Sequential(torch.nn.Conv2d(nf + 2 * gc, gc, (3, 3), padding=1, bias=True), torch.nn.LeakyReLU())
-        self.layer4 = torch.nn.Sequential(torch.nn.Conv2d(nf + 3 * gc, gc, (3, 3), padding=1, bias=True), torch.nn.LeakyReLU())
-        self.layer5 = torch.nn.Sequential(torch.nn.Conv2d(nf + 4 * gc, nf, (3, 3), padding=1, bias=True), torch.nn.LeakyReLU())
+        self.layer1 = torch.nn.Sequential(torch.nn.Conv2d(nf + 0 * gc, gc, (3, 3), padding=1, bias=True),
+                                          torch.nn.LeakyReLU())
+        self.layer2 = torch.nn.Sequential(torch.nn.Conv2d(nf + 1 * gc, gc, (3, 3), padding=1, bias=True),
+                                          torch.nn.LeakyReLU())
+        self.layer3 = torch.nn.Sequential(torch.nn.Conv2d(nf + 2 * gc, gc, (3, 3), padding=1, bias=True),
+                                          torch.nn.LeakyReLU())
+        self.layer4 = torch.nn.Sequential(torch.nn.Conv2d(nf + 3 * gc, gc, (3, 3), padding=1, bias=True),
+                                          torch.nn.LeakyReLU())
+        self.layer5 = torch.nn.Sequential(torch.nn.Conv2d(nf + 4 * gc, nf, (3, 3), padding=1, bias=True),
+                                          torch.nn.LeakyReLU())
         self.res_scale = res_scale
 
     def forward(self, x):
@@ -170,7 +207,7 @@ class ResidualInResidualDenseBlock(torch.nn.Module):
 
 def upsample_block(nf, scale_factor=2):
     block = []
-    for _ in range(scale_factor//2):
+    for _ in range(scale_factor // 2):
         block += [
             torch.nn.Conv2d(nf, nf * (2 ** 2), (1, 1)),
             torch.nn.PixelShuffle(2),
@@ -182,7 +219,8 @@ def upsample_block(nf, scale_factor=2):
 class ESRGAN(torch.nn.Module):
     def __init__(self, in_channels=3, out_channels=3, nf=64, gc=32, scale_factor=2, n_basic_block=4):
         super(ESRGAN, self).__init__()
-        self.conv1 = torch.nn.Sequential(torch.nn.ReflectionPad2d(1), torch.nn.Conv2d(in_channels, nf, (3, 3)), torch.nn.ReLU())
+        self.conv1 = torch.nn.Sequential(torch.nn.ReflectionPad2d(1), torch.nn.Conv2d(in_channels, nf, (3, 3)),
+                                         torch.nn.ReLU())
         basic_block_layer = []
         for _ in range(n_basic_block):
             basic_block_layer += [ResidualInResidualDenseBlock(nf, gc)]
@@ -191,7 +229,8 @@ class ESRGAN(torch.nn.Module):
         self.conv2 = torch.nn.Sequential(torch.nn.ReflectionPad2d(1), torch.nn.Conv2d(nf, nf, (3, 3)), torch.nn.ReLU())
         self.upsample = upsample_block(nf, scale_factor=scale_factor)
         self.conv3 = torch.nn.Sequential(torch.nn.ReflectionPad2d(1), torch.nn.Conv2d(nf, nf, (3, 3)), torch.nn.ReLU())
-        self.conv4 = torch.nn.Sequential(torch.nn.ReflectionPad2d(1), torch.nn.Conv2d(nf, out_channels, (3, 3)), torch.nn.ReLU())
+        self.conv4 = torch.nn.Sequential(torch.nn.ReflectionPad2d(1), torch.nn.Conv2d(nf, out_channels, (3, 3)),
+                                         torch.nn.ReLU())
 
     def forward(self, x):
         x1 = self.conv1(x)

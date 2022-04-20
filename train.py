@@ -5,15 +5,14 @@ import torch
 import torch.nn.functional
 import math
 import tensorflow as tf
+import multiprocessing
 from torch.utils.data import DataLoader
 from pathlib import Path
 from tensorflow import summary
 from skimage.metrics import structural_similarity as sk_ssim
 from my_utils import get_logger, make_dir, load_checkpoint
-from dataset import CroppingDataset
-from models import weight_init, \
-    ModelSelect, DiscriminatorSelect, SRCNN, SRCNNLinear, ESRGAN, FSRCNN, \
-    PatchDiscriminatorSingleInput, PatchDiscriminatorDoubleInput
+from dataset import *
+from models import *
 
 # check if GPU is available
 cuda = True if torch.cuda.is_available() else False
@@ -50,6 +49,8 @@ def train(
         num_workers_val: int,
         discriminator_select=DiscriminatorSelect.NO_DISCRIMINATOR,
         disc_loss_weight=0.1,
+        train_crop='random_crop',
+        choose_detaset='crop',
 ):
     # make dir for output dir
     output_dir = os.path.join(output_dir, session_name)
@@ -71,17 +72,17 @@ def train(
 
     train_dataset = CroppingDataset(
         dataset_dir=train_dataset_dirs[0],
+        rand_flip=True,
         x_size=img_shape_x,
         y_size=img_shape_y,
-        resize_mode='random_scale_crop',
-        rand_flip=True,
+        resize_mode=train_crop,
     )
     val_dataset = CroppingDataset(
         dataset_dir=val_dataset_dirs[0],
         x_size=img_shape_x,
         y_size=img_shape_y,
         resize_mode='crop_middle',
-        rand_flip=True,
+        rand_flip=False,
     )
     for i in range(len(train_dataset_dirs)):
         if i == 0:
@@ -107,6 +108,31 @@ def train(
                 rand_flip=False,
             )
         )
+
+    if choose_detaset == 'resize':
+        train_dataset = ResizingDataset(
+            dataset_dir=train_dataset_dirs[0],
+            rand_flip=True,
+        )
+        val_dataset = ResizingDataset(
+            dataset_dir=val_dataset_dirs[0],
+        )
+        for i in range(len(train_dataset_dirs)):
+            if i == 0:
+                continue
+            train_dataset.join(
+                ResizingDataset(
+                    dataset_dir=train_dataset_dirs[i],
+                )
+            )
+        for i in range(len(val_dataset_dirs)):
+            if i == 0:
+                continue
+            val_dataset.join(
+                ResizingDataset(
+                    dataset_dir=val_dataset_dirs[i],
+                )
+            )
     train_loader = DataLoader(
         dataset=train_dataset,
         shuffle=shuffle,
@@ -130,13 +156,15 @@ def train(
     # get network
     model = None
     if model_select == ModelSelect.SRCNN_SIGMOID:
-        model = SRCNN()
+        model = SRCNN_SIGMOID()
     elif model_select == ModelSelect.SRCNN:
-        model = SRCNNLinear()
+        model = SRCNN()
     elif model_select == ModelSelect.FSRCNN:
         model = FSRCNN()
     elif model_select == ModelSelect.ESRGAN:
         model = ESRGAN()
+    elif model_select == ModelSelect.FSRECNNSRCNN:
+        model = FSRECNNSRCNN()
     assert model is not None
 
     # get_discriminator
@@ -293,13 +321,16 @@ def train(
 
         # start validation
         single_img_count = 0
+        batch_count = 0
         mse_val_sum = 0
         psnr_val_sum = 0
         ssim_val_sum = 0
         with torch.no_grad():  # cancel gradients to save memory
             model.eval()
             img_x, img_y, out = None, None, None
-            for img_x, img_y in tqdm.tqdm(val_loader, desc='Ep %d val' % epoch_idx):
+            for img_x, img_y in tqdm.tqdm(val_loader, desc='Ep %d val' % epoch_idx,
+                                          total=len(val_dataset)//batch_size_val//10
+                                          if len(val_dataset) > 200 else None):
                 if cuda:
                     img_x = img_x.cuda()
                     img_y = img_y.cuda()
@@ -319,6 +350,10 @@ def train(
                     mse_val_sum += mse_single_val
                     psnr_val_sum += psnr_single_val
                     ssim_val_sum += ssim_single_val
+                batch_count += 1
+                if len(val_dataset) > 200:
+                    if batch_count >= len(val_dataset)//batch_size_val//10:
+                        break
 
             # again, these might help saving some memory...
             if cuda:
@@ -377,6 +412,8 @@ def train_on_folds(
         shuffle=True,
         disc_loss_weight=0.1,
         run_tests=None,
+        train_crop='random_crop',
+        choose_detaset='crop',
 ):
     if run_tests is None:
         run_tests = len(dataset_dirs)
@@ -409,18 +446,134 @@ def train_on_folds(
             shuffle=shuffle,
             num_workers_train=num_workers_train,
             num_workers_val=num_workers_val,
+            train_crop=train_crop,
+            choose_detaset=choose_detaset,
         )
 
 
 if __name__ == '__main__':
+    '''
+    train_on_folds(
+        session_name='SRCNN-test',
+        output_dir=r'E:\my_files\programmes\python\super_resolution_outputs',
+        x_size=(16, 16),
+        y_size=(32, 32),
+        model_select=ModelSelect.SRCNN,
+        discriminator_select=DiscriminatorSelect.NO_DISCRIMINATOR,
+        dataset_dirs=[
+            r'E:\my_files\programmes\python\super_resolution_images\fold0',
+            r'E:\my_files\programmes\python\super_resolution_images\fold1',
+            # r'E:\my_files\programmes\python\super_resolution_images\fold2',
+            # r'E:\my_files\programmes\python\super_resolution_images\fold3',
+            # r'E:\my_files\programmes\python\super_resolution_images\fold4',
+        ],
+        epochs=20,
+        batch_size_train=1,
+        batch_size_val=1,
+        learning_rate=0.0001,
+        num_workers_train=4,
+        num_workers_val=4,
+        shuffle=True,
+        run_tests=1,
+    )
+    exit(0)
+    '''
+    '''
+    # ++++++++++++++++++++++++++++++++++++++++++++++++++
+    # +++        Experiment on sigmoid SRCNN         +++
+    # ++++++++++++++++++++++++++++++++++++++++++++++++++
+    train_on_folds(
+        session_name='SRCNN_SIGMOID-91-b8',
+        output_dir=r'E:\my_files\programmes\python\super_resolution_outputs',
+        x_size=(16, 16),
+        y_size=(32, 32),
+        model_select=ModelSelect.SRCNN_SIGMOID,
+        discriminator_select=DiscriminatorSelect.NO_DISCRIMINATOR,
+        dataset_dirs=[
+            r'E:\my_files\programmes\python\super_resolution_images\srclassic\SR_training_datasets\T91',
+            r'E:\my_files\programmes\python\super_resolution_images\srclassic\SR_testing_datasets\Set5',
+        ],
+        epochs=4000,
+        batch_size_train=8,
+        batch_size_val=1,
+        learning_rate=0.0001,
+        num_workers_train=0,
+        num_workers_val=0,
+        shuffle=True,
+        run_tests=1,
+        # choose_detaset='resize',
+    )
+    '''
+    # ++++++++++++++++++++++++++++++++++++++++++++++++++
+    # +++          Experiment on pure SRCNN          +++
+    # ++++++++++++++++++++++++++++++++++++++++++++++++++
+    train_on_folds(
+        session_name='SRCNN-5000-64',
+        output_dir=r'E:\my_files\programmes\python\super_resolution_outputs',
+        x_size=(64, 64),
+        y_size=(128, 128),
+        model_select=ModelSelect.SRCNN,
+        discriminator_select=DiscriminatorSelect.NO_DISCRIMINATOR,
+        dataset_dirs=[
+            r'E:\my_files\programmes\python\super_resolution_images\fold0',
+            r'E:\my_files\programmes\python\super_resolution_images\fold1',
+            r'E:\my_files\programmes\python\super_resolution_images\fold2',
+            r'E:\my_files\programmes\python\super_resolution_images\fold3',
+            r'E:\my_files\programmes\python\super_resolution_images\fold4',
+            # r'E:\my_files\programmes\python\super_resolution_images\srclassic\SR_training_datasets\T91',
+            r'E:\my_files\programmes\python\super_resolution_images\srclassic\SR_testing_datasets\Set5',
+        ],
+        epochs=70,
+        batch_size_train=8,
+        batch_size_val=1,
+        learning_rate=0.0001,
+        num_workers_train=8,
+        num_workers_val=0,
+        shuffle=True,
+        run_tests=1,
+        train_crop='random_scale_crop',
+        # choose_detaset='resize',
+    )
+
+    # ++++++++++++++++++++++++++++++++++++++++++++++++++
+    # +++         Experiment on pure FSRCNN          +++
+    # ++++++++++++++++++++++++++++++++++++++++++++++++++
+    train_on_folds(
+        session_name='FSRCNN-5000-64',
+        output_dir=r'E:\my_files\programmes\python\super_resolution_outputs',
+        x_size=(64, 64),
+        y_size=(128, 128),
+        model_select=ModelSelect.FSRCNN,
+        discriminator_select=DiscriminatorSelect.NO_DISCRIMINATOR,
+        dataset_dirs=[
+            r'E:\my_files\programmes\python\super_resolution_images\fold0',
+            r'E:\my_files\programmes\python\super_resolution_images\fold1',
+            r'E:\my_files\programmes\python\super_resolution_images\fold2',
+            r'E:\my_files\programmes\python\super_resolution_images\fold3',
+            r'E:\my_files\programmes\python\super_resolution_images\fold4',
+            # r'E:\my_files\programmes\python\super_resolution_images\srclassic\SR_training_datasets\T91',
+            r'E:\my_files\programmes\python\super_resolution_images\srclassic\SR_testing_datasets\Set5',
+        ],
+        epochs=70,
+        batch_size_train=8,
+        batch_size_val=1,
+        learning_rate=0.0001,
+        num_workers_train=8,
+        num_workers_val=0,
+        shuffle=True,
+        run_tests=1,
+        # choose_detaset='resize',
+    )
+    exit(0)
+    '''
     # ++++++++++++++++++++++++++++++++++++++++++++++++++
     # +++        Experiment on sigmoid SRCNN         +++
     # ++++++++++++++++++++++++++++++++++++++++++++++++++
     train_on_folds(
         session_name='SRCNN_SIGMOID',
         output_dir=r'E:\my_files\programmes\python\super_resolution_outputs',
-        x_size=(240, 240),
-        y_size=(480, 480),
+        x_size=(1080, 1920),
+        y_size=(2160, 3840),
         model_select=ModelSelect.SRCNN_SIGMOID,
         discriminator_select=DiscriminatorSelect.NO_DISCRIMINATOR,
         dataset_dirs=[
@@ -444,15 +597,15 @@ if __name__ == '__main__':
     # r'/home/mbt/super_resolution_workplace/super_resolution_images/fold2',
     # r'/home/mbt/super_resolution_workplace/super_resolution_images/fold3',
     # r'/home/mbt/super_resolution_workplace/super_resolution_images/fold4',
-
+    '''
     # ++++++++++++++++++++++++++++++++++++++++++++++++++
     # +++          Experiment on pure SRCNN          +++
     # ++++++++++++++++++++++++++++++++++++++++++++++++++
     train_on_folds(
         session_name='SRCNN',
         output_dir=r'E:\my_files\programmes\python\super_resolution_outputs',
-        x_size=(240, 240),
-        y_size=(480, 480),
+        x_size=(1080, 1920),
+        y_size=(2160, 3840),
         model_select=ModelSelect.SRCNN,
         discriminator_select=DiscriminatorSelect.NO_DISCRIMINATOR,
         dataset_dirs=[
@@ -462,14 +615,14 @@ if __name__ == '__main__':
             r'E:\my_files\programmes\python\super_resolution_images\fold3',
             r'E:\my_files\programmes\python\super_resolution_images\fold4',
         ],
-        epochs=60,
-        batch_size_train=4,
+        epochs=10,
+        batch_size_train=1,
         batch_size_val=1,
         learning_rate=0.0001,
-        num_workers_train=8,
-        num_workers_val=8,
+        num_workers_train=4,
+        num_workers_val=4,
         shuffle=True,
-        run_tests=5,
+        run_tests=1,
     )
 
     # ++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -478,8 +631,8 @@ if __name__ == '__main__':
     train_on_folds(
         session_name='FSRCNN',
         output_dir=r'E:\my_files\programmes\python\super_resolution_outputs',
-        x_size=(240, 240),
-        y_size=(480, 480),
+        x_size=(1080, 1920),
+        y_size=(2160, 3840),
         model_select=ModelSelect.FSRCNN,
         discriminator_select=DiscriminatorSelect.NO_DISCRIMINATOR,
         dataset_dirs=[
@@ -489,14 +642,14 @@ if __name__ == '__main__':
             r'E:\my_files\programmes\python\super_resolution_images\fold3',
             r'E:\my_files\programmes\python\super_resolution_images\fold4',
         ],
-        epochs=60,
-        batch_size_train=4,
+        epochs=10,
+        batch_size_train=1,
         batch_size_val=1,
         learning_rate=0.0001,
-        num_workers_train=8,
-        num_workers_val=8,
+        num_workers_train=4,
+        num_workers_val=4,
         shuffle=True,
-        run_tests=5,
+        run_tests=1,
     )
 
     # +++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -505,8 +658,8 @@ if __name__ == '__main__':
     train_on_folds(
         session_name='SRCNN-DISC-SINGLE',
         output_dir=r'E:\my_files\programmes\python\super_resolution_outputs',
-        x_size=(240, 240),
-        y_size=(480, 480),
+        x_size=(1080, 1920),
+        y_size=(2160, 3840),
         model_select=ModelSelect.SRCNN,
         discriminator_select=DiscriminatorSelect.PATCH_DISCRIMINATOR_SINGLE_INPUT,
         dataset_dirs=[
@@ -516,15 +669,15 @@ if __name__ == '__main__':
             r'E:\my_files\programmes\python\super_resolution_images\fold3',
             r'E:\my_files\programmes\python\super_resolution_images\fold4',
         ],
-        epochs=60,
-        batch_size_train=4,
+        epochs=10,
+        batch_size_train=1,
         batch_size_val=1,
         learning_rate=0.0001,
-        num_workers_train=8,
-        num_workers_val=8,
+        num_workers_train=4,
+        num_workers_val=4,
         shuffle=True,
         disc_loss_weight=0.1,
-        run_tests=5,
+        run_tests=1,
     )
 
     # +++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -533,8 +686,8 @@ if __name__ == '__main__':
     train_on_folds(
         session_name='SRCNN-DISC-DOUBLE',
         output_dir=r'E:\my_files\programmes\python\super_resolution_outputs',
-        x_size=(240, 240),
-        y_size=(480, 480),
+        x_size=(1080, 1920),
+        y_size=(2160, 3840),
         model_select=ModelSelect.SRCNN,
         discriminator_select=DiscriminatorSelect.PATCH_DISCRIMINATOR_DOUBLE_INPUT,
         dataset_dirs=[
@@ -544,15 +697,15 @@ if __name__ == '__main__':
             r'E:\my_files\programmes\python\super_resolution_images\fold3',
             r'E:\my_files\programmes\python\super_resolution_images\fold4',
         ],
-        epochs=60,
-        batch_size_train=4,
+        epochs=10,
+        batch_size_train=1,
         batch_size_val=1,
         learning_rate=0.0001,
-        num_workers_train=8,
-        num_workers_val=8,
+        num_workers_train=4,
+        num_workers_val=4,
         shuffle=True,
         disc_loss_weight=0.1,
-        run_tests=5,
+        run_tests=1,
     )
 
     # ++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -561,8 +714,8 @@ if __name__ == '__main__':
     train_on_folds(
         session_name='FSRCNN-DISC-SINGLE',
         output_dir=r'E:\my_files\programmes\python\super_resolution_outputs',
-        x_size=(240, 240),
-        y_size=(480, 480),
+        x_size=(1080, 1920),
+        y_size=(2160, 3840),
         model_select=ModelSelect.FSRCNN,
         discriminator_select=DiscriminatorSelect.PATCH_DISCRIMINATOR_SINGLE_INPUT,
         dataset_dirs=[
@@ -572,15 +725,15 @@ if __name__ == '__main__':
             r'E:\my_files\programmes\python\super_resolution_images\fold3',
             r'E:\my_files\programmes\python\super_resolution_images\fold4',
         ],
-        epochs=60,
-        batch_size_train=4,
+        epochs=10,
+        batch_size_train=1,
         batch_size_val=1,
         learning_rate=0.0001,
-        num_workers_train=8,
-        num_workers_val=8,
+        num_workers_train=4,
+        num_workers_val=4,
         shuffle=True,
         disc_loss_weight=0.1,
-        run_tests=5,
+        run_tests=1,
     )
 
     # ++++++++++++++++++++++++++++++++++++++++++++++++++++
@@ -589,8 +742,8 @@ if __name__ == '__main__':
     train_on_folds(
         session_name='FSRCNN-DISC-DOUBLE',
         output_dir=r'E:\my_files\programmes\python\super_resolution_outputs',
-        x_size=(240, 240),
-        y_size=(480, 480),
+        x_size=(1080, 1920),
+        y_size=(2160, 3840),
         model_select=ModelSelect.FSRCNN,
         discriminator_select=DiscriminatorSelect.PATCH_DISCRIMINATOR_DOUBLE_INPUT,
         dataset_dirs=[
@@ -600,13 +753,13 @@ if __name__ == '__main__':
             r'E:\my_files\programmes\python\super_resolution_images\fold3',
             r'E:\my_files\programmes\python\super_resolution_images\fold4',
         ],
-        epochs=60,
+        epochs=10,
         batch_size_train=4,
-        batch_size_val=1,
+        batch_size_val=4,
         learning_rate=0.0001,
-        num_workers_train=8,
-        num_workers_val=8,
+        num_workers_train=4,
+        num_workers_val=4,
         shuffle=True,
         disc_loss_weight=0.1,
-        run_tests=5,
+        run_tests=1,
     )
